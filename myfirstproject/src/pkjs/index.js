@@ -1,6 +1,17 @@
 // OpenWeatherMap API Key - Get one free at https://openweathermap.org/appid
 var myAPIKey = 'REMOVED_API_KEY';
 
+// BATTERY OPTIMIZATION STRATEGY:
+// - GPS cached for 3 hours (major battery saver - GPS is expensive)
+// - Weather fetched every 15 minutes using cached GPS
+// - No weather fetch on startup (uses persistent cache from C code)
+// - Only updates when data actually changes
+
+// GPS cache - updated every 3 hours
+var cachedLocation = null;
+var lastLocationTime = 0;
+var GPS_CACHE_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+
 function iconFromWeatherId(weatherId) {
   if (weatherId < 600) {
     return 2; // Rain
@@ -58,21 +69,51 @@ function fetchWeather(latitude, longitude) {
 
 function locationSuccess(pos) {
   var coordinates = pos.coords;
+  // Cache the location
+  cachedLocation = {
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude
+  };
+  lastLocationTime = Date.now();
+  console.log('GPS location cached: ' + cachedLocation.latitude + ', ' + cachedLocation.longitude);
+  
   fetchWeather(coordinates.latitude, coordinates.longitude);
 }
 
 function locationError(err) {
   console.warn('location error (' + err.code + '): ' + err.message);
-  Pebble.sendAppMessage({
-    2: 'error',        // WEATHER_CITY_KEY
-    1: 0               // WEATHER_TEMPERATURE_KEY
-  },
-  function(e) {
-    console.log('Error message sent to watch');
-  },
-  function(e) {
-    console.log('Failed to send error to watch');
-  });
+  
+  // If we have a cached location, use it
+  if (cachedLocation) {
+    console.log('Using cached location due to GPS error');
+    fetchWeather(cachedLocation.latitude, cachedLocation.longitude);
+  } else {
+    Pebble.sendAppMessage({
+      2: 'error',        // WEATHER_CITY_KEY
+      1: 0               // WEATHER_TEMPERATURE_KEY
+    },
+    function(e) {
+      console.log('Error message sent to watch');
+    },
+    function(e) {
+      console.log('Failed to send error to watch');
+    });
+  }
+}
+
+function getWeather() {
+  var now = Date.now();
+  var timeSinceLastLocation = now - lastLocationTime;
+  
+  // If we have a cached location and it's less than 3 hours old, use it
+  if (cachedLocation && timeSinceLastLocation < GPS_CACHE_DURATION) {
+    console.log('Using cached GPS location (age: ' + Math.round(timeSinceLastLocation / 60000) + ' minutes)');
+    fetchWeather(cachedLocation.latitude, cachedLocation.longitude);
+  } else {
+    // Location is stale or doesn't exist, get fresh GPS
+    console.log('Requesting fresh GPS location (cache age: ' + Math.round(timeSinceLastLocation / 60000) + ' minutes)');
+    window.navigator.geolocation.getCurrentPosition(locationSuccess, locationError, locationOptions);
+  }
 }
 
 var locationOptions = {
@@ -83,27 +124,18 @@ var locationOptions = {
 Pebble.addEventListener('ready', function (e) {
   console.log('PebbleKit JS ready!');
   
-  // Send fake weather data for testing (comment this out once API key works)
-  console.log('Sending fake weather data for testing...');
-  Pebble.sendAppMessage({
-    0: 0,              // WEATHER_ICON_KEY
-    1: 19,             // WEATHER_TEMPERATURE_KEY (19c)
-    2: 'clear'         // WEATHER_CITY_KEY (condition)
-  },
-  function(e) {
-    console.log('Fake weather sent successfully!');
-  },
-  function(e) {
-    console.log('Failed to send fake weather: ' + JSON.stringify(e));
-  });
+  // Fetch weather once on startup to ensure data is available
+  // The C code will display cached data first, then update with fresh data
+  getWeather();
   
-  // Comment out the real API call until your key activates (10-15 min after creation)
-  // window.navigator.geolocation.getCurrentPosition(locationSuccess, locationError,
-  //   locationOptions);
+  // Update weather every 15 minutes using cached GPS (only refresh GPS every 3 hours)
+  setInterval(function() {
+    console.log('Auto-updating weather...');
+    getWeather();
+  }, 15 * 60 * 1000); // 15 minutes in milliseconds
 });
 
 Pebble.addEventListener('appmessage', function (e) {
   console.log('Received message from watch, requesting weather update');
-  window.navigator.geolocation.getCurrentPosition(locationSuccess, locationError,
-    locationOptions);
+  getWeather();
 });
