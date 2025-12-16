@@ -1,6 +1,5 @@
 // OpenWeatherMap API Key - Get one free at https://openweathermap.org/appid
-// Reads from WEATHER_SECRET environment variable at build time
-var myAPIKey = typeof WEATHER_API_KEY !== 'undefined' ? WEATHER_API_KEY : (process.env.WEATHER_SECRET || '');
+var myAPIKey = 'REMOVED_SECRET';
 
 // BATTERY OPTIMIZATION STRATEGY:
 // - GPS cached for 3 hours (major battery saver - GPS is expensive)

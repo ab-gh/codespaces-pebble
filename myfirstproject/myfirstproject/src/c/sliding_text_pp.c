@@ -131,27 +131,11 @@ static void date_to_words_abbreviated(int day, int month, char *buffer) {
   snprintf(buffer, 32, "%d%s %s", day, suffix, months_abbr[month]);
 }
 
-// Helper function to check if two text strings would collide based on actual pixel widths
-static bool would_collide_with_font(const char *left_text, const char *right_text, GFont font, int screen_width) {
-  if (!left_text || !right_text || strlen(left_text) == 0 || strlen(right_text) == 0) {
-    return false;
-  }
-  
-  // Calculate actual text widths in pixels
-  GSize left_size = graphics_text_layout_get_content_size(left_text, font, 
-    GRect(0, 0, screen_width, 100), GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  GSize right_size = graphics_text_layout_get_content_size(right_text, font,
-    GRect(0, 0, screen_width, 100), GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  
-  // Add some padding between texts (20 pixels for better safety)
-  int padding = 20;
-  return (left_size.w + right_size.w + padding) > screen_width;
-}
-
-// Helper to get screen width
-static int get_screen_width(SlidingTextData *data) {
-  Layer *window_layer = window_get_root_layer(data->window);
-  return layer_get_bounds(window_layer).size.w;
+// Helper function to check if two text strings would collide
+static bool would_collide(const char *left_text, const char *right_text, int threshold) {
+  int left_len = left_text ? strlen(left_text) : 0;
+  int right_len = right_text ? strlen(right_text) : 0;
+  return (left_len > 0 && right_len > 0 && left_len + right_len > threshold);
 }
 
 static void number_to_words(int num, char *buffer) {
@@ -290,14 +274,12 @@ static void animation_update(struct Animation *animation, const AnimationProgres
   if (data->last_day != t.tm_wday || data->weather_changed) {
     something_changed = true;
     
-    int screen_width = get_screen_width(data);
-    
     // Update day - abbreviate if it would collide with temperature
     const char *temp_text = text_layer_get_text(data->weather_condition_row.label);
     char full_day[32];
     day_to_word(t.tm_wday, full_day);
     
-    if (would_collide_with_font(temp_text, full_day, data->gothic18_bold, screen_width)) {
+    if (would_collide(temp_text, full_day, 12)) {
       day_to_abbreviated(t.tm_wday, rs->days[rs->next_days]);
     } else {
       strcpy(rs->days[rs->next_days], full_day);
@@ -308,7 +290,7 @@ static void animation_update(struct Animation *animation, const AnimationProgres
     char full_date[32];
     date_to_words(t.tm_mday, t.tm_mon, full_date);
     
-    if (would_collide_with_font(cond_text, full_date, data->gothic18, screen_width)) {
+    if (would_collide(cond_text, full_date, 18)) {
       date_to_words_abbreviated(t.tm_mday, t.tm_mon, rs->dates[rs->next_dates]);
     } else {
       strcpy(rs->dates[rs->next_dates], full_date);
@@ -406,12 +388,10 @@ static void handle_battery(BatteryChargeState charge_state) {
     char battery_full[64];
     snprintf(battery_full, 64, "%s pc", num_words);
     
-    int screen_width = get_screen_width(data);
-    
     // Use compact format if battery text would collide with steps
     const char *steps_text = text_layer_get_text(data->steps_row.label);
     
-    if (would_collide_with_font(steps_text, battery_full, data->gothic18, screen_width)) {
+    if (would_collide(steps_text, battery_full, 14)) {
       snprintf(rs->battery[rs->next_battery], 64, "%d %%", battery_percent);
     } else {
       strcpy(rs->battery[rs->next_battery], battery_full);
@@ -439,15 +419,10 @@ static void health_handler(HealthEventType event, void *context) {
       int steps = (int)health_service_sum_today(metric);
       
       if (data->last_steps != steps) {
-        snprintf(rs->steps[rs->next_steps], 32, "%d", steps);
+        snprintf(rs->steps[rs->next_steps], 32, "%d st", steps);
         slide_in_text(data, &data->steps_row, rs->steps[rs->next_steps]);
         rs->next_steps = rs->next_steps ? 0 : 1;
         data->last_steps = steps;
-        
-        // Re-check battery collision when steps change
-        BatteryChargeState battery_state = battery_state_service_peek();
-        handle_battery(battery_state);
-        
         make_animation();
       }
     }
