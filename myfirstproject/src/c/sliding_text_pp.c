@@ -7,6 +7,19 @@ enum WeatherKey {
   WEATHER_CITY_KEY = 0x2,
 };
 
+// Persistent storage keys
+#define PERSIST_WEATHER_CONDITION 100
+#define PERSIST_WEATHER_TEMPERATURE 101
+
+// BATTERY OPTIMIZATION STRATEGY:
+// - Weather cached in persistent storage (loaded instantly on startup)
+// - Only redraw when data actually changes (animation_update checks this)
+// - Steps/battery only update when values change
+// - Weather requested every 15 min (GPS cached 3 hrs in JS)
+
+// Forward declarations
+static void request_weather(void);
+
 typedef enum {
   MOVING_IN,
   IN_FRAME,
@@ -42,6 +55,7 @@ typedef struct {
   int last_battery;
   int last_temperature;
   int last_steps;
+  bool weather_changed;  // Flag to trigger collision re-check when weather updates
 
   GFont bitham42_bold;
   GFont bitham42_light;
@@ -88,6 +102,11 @@ static void day_to_word(int day, char *buffer) {
   strcpy(buffer, days[day]);
 }
 
+static void day_to_abbreviated(int day, char *buffer) {
+  const char *days_abbr[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
+  strcpy(buffer, days_abbr[day]);
+}
+
 static void date_to_words(int day, int month, char *buffer) {
   const char *months[] = {"january", "february", "march", "april", "may", "june",
                           "july", "august", "september", "october", "november", "december"};
@@ -98,6 +117,25 @@ static void date_to_words(int day, int month, char *buffer) {
   else if (day == 3 || day == 23) suffix = "rd";
   
   snprintf(buffer, 32, "%d%s %s", day, suffix, months[month]);
+}
+
+static void date_to_words_abbreviated(int day, int month, char *buffer) {
+  const char *months_abbr[] = {"jan", "feb", "mar", "apr", "may", "jun",
+                               "jul", "aug", "sep", "oct", "nov", "dec"};
+  
+  const char *suffix = "th";
+  if (day == 1 || day == 21 || day == 31) suffix = "st";
+  else if (day == 2 || day == 22) suffix = "nd";
+  else if (day == 3 || day == 23) suffix = "rd";
+  
+  snprintf(buffer, 32, "%d%s %s", day, suffix, months_abbr[month]);
+}
+
+// Helper function to check if two text strings would collide
+static bool would_collide(const char *left_text, const char *right_text, int threshold) {
+  int left_len = left_text ? strlen(left_text) : 0;
+  int right_len = right_text ? strlen(right_text) : 0;
+  return (left_len > 0 && right_len > 0 && left_len + right_len > threshold);
 }
 
 static void number_to_words(int num, char *buffer) {
@@ -154,6 +192,7 @@ static void init_sliding_row(SlidingTextData *data, SlidingRow *row, GRect pos, 
   data->last_battery = -1;
   data->last_temperature = 999;
   data->last_steps = -1;
+  data->weather_changed = false;
 }
 
 static void slide_in_text(SlidingTextData *data, SlidingRow *row, char* new_text) {
@@ -232,16 +271,44 @@ static void animation_update(struct Animation *animation, const AnimationProgres
 
   bool something_changed = false;
 
-  if (data->last_day != t.tm_wday) {
+  if (data->last_day != t.tm_wday || data->weather_changed) {
     something_changed = true;
-    // Update day of the week and date
-    day_to_word(t.tm_wday, rs->days[rs->next_days]);
-    date_to_words(t.tm_mday, t.tm_mon, rs->dates[rs->next_dates]);
-    slide_in_text(data, &data->rows[0], rs->days[rs->next_days]);
-    slide_in_text(data, &data->date_row, rs->dates[rs->next_dates]);
-    rs->next_days = rs->next_days ? 0 : 1;
-    rs->next_dates = rs->next_dates ? 0 : 1;
-    data->last_day = t.tm_wday;
+    
+    // Update day - abbreviate if it would collide with temperature
+    const char *temp_text = text_layer_get_text(data->weather_condition_row.label);
+    char full_day[32];
+    day_to_word(t.tm_wday, full_day);
+    
+    if (would_collide(temp_text, full_day, 12)) {
+      day_to_abbreviated(t.tm_wday, rs->days[rs->next_days]);
+    } else {
+      strcpy(rs->days[rs->next_days], full_day);
+    }
+    
+    // Update date - abbreviate month if it would collide with conditions
+    const char *cond_text = text_layer_get_text(data->weather_row.label);
+    char full_date[32];
+    date_to_words(t.tm_mday, t.tm_mon, full_date);
+    
+    if (would_collide(cond_text, full_date, 18)) {
+      date_to_words_abbreviated(t.tm_mday, t.tm_mon, rs->dates[rs->next_dates]);
+    } else {
+      strcpy(rs->dates[rs->next_dates], full_date);
+    }
+    
+    if (data->last_day != t.tm_wday) {
+      slide_in_text(data, &data->rows[0], rs->days[rs->next_days]);
+      slide_in_text(data, &data->date_row, rs->dates[rs->next_dates]);
+      rs->next_days = rs->next_days ? 0 : 1;
+      rs->next_dates = rs->next_dates ? 0 : 1;
+      data->last_day = t.tm_wday;
+    }
+    
+    // Reset weather change flag after processing
+    data->weather_changed = false;
+    
+    // Reset weather change flag after processing
+    data->weather_changed = false;
   }
 
   if (data->last_minute != t.tm_min) {
@@ -302,6 +369,11 @@ static void make_animation() {
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
   make_animation();
+  
+  // Update weather every 15 minutes
+  if (tick_time->tm_min % 15 == 0) {
+    request_weather();
+  }
 }
 
 static void handle_battery(BatteryChargeState charge_state) {
@@ -313,7 +385,18 @@ static void handle_battery(BatteryChargeState charge_state) {
   if (data->last_battery != battery_percent) {
     char num_words[64];
     number_to_words(battery_percent, num_words);
-    snprintf(rs->battery[rs->next_battery], 64, "%s %%", num_words);
+    char battery_full[64];
+    snprintf(battery_full, 64, "%s pc", num_words);
+    
+    // Use compact format if battery text would collide with steps
+    const char *steps_text = text_layer_get_text(data->steps_row.label);
+    
+    if (would_collide(steps_text, battery_full, 14)) {
+      snprintf(rs->battery[rs->next_battery], 64, "%d %%", battery_percent);
+    } else {
+      strcpy(rs->battery[rs->next_battery], battery_full);
+    }
+    
     slide_in_text(data, &data->battery_row, rs->battery[rs->next_battery]);
     rs->next_battery = rs->next_battery ? 0 : 1;
     data->last_battery = battery_percent;
@@ -336,7 +419,7 @@ static void health_handler(HealthEventType event, void *context) {
       int steps = (int)health_service_sum_today(metric);
       
       if (data->last_steps != steps) {
-        snprintf(rs->steps[rs->next_steps], 32, "%d", steps);
+        snprintf(rs->steps[rs->next_steps], 32, "%d st", steps);
         slide_in_text(data, &data->steps_row, rs->steps[rs->next_steps]);
         rs->next_steps = rs->next_steps ? 0 : 1;
         data->last_steps = steps;
@@ -360,10 +443,22 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     APP_LOG(APP_LOG_LEVEL_INFO, "Temperature: %d", temperature);
     
     if (data->last_temperature != temperature) {
-      snprintf(rs->temperature[rs->next_temperature], 32, "%dc", temperature);
-      slide_in_text(data, &data->weather_row, rs->temperature[rs->next_temperature]);
+      // Convert temperature to words for top-left display
+      char temp_words[32];
+      number_to_words(temperature, temp_words);
+      snprintf(rs->temperature[rs->next_temperature], 32, "%s c", temp_words);
+      
+      // Send temperature to weather_condition_row (top-left, bold)
+      slide_in_text(data, &data->weather_condition_row, rs->temperature[rs->next_temperature]);
       rs->next_temperature = rs->next_temperature ? 0 : 1;
       data->last_temperature = temperature;
+      
+      // Cache temperature to persistent storage
+      persist_write_int(PERSIST_WEATHER_TEMPERATURE, temperature);
+      
+      // Trigger day/date re-check for collision detection
+      data->weather_changed = true;
+      
       make_animation();
     }
   }
@@ -372,8 +467,17 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
     APP_LOG(APP_LOG_LEVEL_INFO, "Condition: %s", condition_tuple->value->cstring);
     strncpy(rs->weather_condition[rs->next_weather_condition], condition_tuple->value->cstring, 31);
     rs->weather_condition[rs->next_weather_condition][31] = '\0';
-    slide_in_text(data, &data->weather_condition_row, rs->weather_condition[rs->next_weather_condition]);
+    
+    // Cache condition to persistent storage BEFORE incrementing buffer
+    persist_write_string(PERSIST_WEATHER_CONDITION, rs->weather_condition[rs->next_weather_condition]);
+    
+    // Send conditions to weather_row (second-left)
+    slide_in_text(data, &data->weather_row, rs->weather_condition[rs->next_weather_condition]);
     rs->next_weather_condition = rs->next_weather_condition ? 0 : 1;
+    
+    // Trigger day/date re-check for collision detection
+    data->weather_changed = true;
+    
     make_animation();
   }
 }
@@ -440,41 +544,40 @@ static void handle_init() {
   data->gothic18 = fonts_get_system_font(FONT_KEY_GOTHIC_18);
 
   Layer *window_layer = window_get_root_layer(data->window);
+  struct SlidingTextRenderState *rs = &data->render_state;
   GRect layer_frame = layer_get_frame(window_layer);
   const int16_t width = layer_frame.size.w;
   const int16_t padding = 5;
 
-  init_sliding_row(data, &data->rows[0], GRect(0, 0, width - padding, 60), data->gothic18_bold, 6);
+  init_sliding_row(data, &data->rows[0], GRect(2, -2, width - padding, 60), data->gothic18_bold, 6);
   text_layer_set_text_alignment(data->rows[0].label, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight));
   layer_add_child(window_layer, text_layer_get_layer(data->rows[0].label));
 
-  init_sliding_row(data, &data->date_row, GRect(0, 15, width - padding, 60), data->gothic18, 6);
+  init_sliding_row(data, &data->date_row, GRect(2, 14, width - padding, 60), data->gothic18, 6);
   text_layer_set_text_alignment(data->date_row.label, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight));
   layer_add_child(window_layer, text_layer_get_layer(data->date_row.label));
 
-  init_sliding_row(data, &data->rows[1], GRect(0, 26, width, 60), data->bitham42_bold, 6);
+  init_sliding_row(data, &data->rows[1], GRect(2, 26, width, 60), data->bitham42_bold, 6);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[1].label));
 
-  init_sliding_row(data, &data->rows[2], GRect(0, 62, width, 96), data->bitham42_light, 3);
+  init_sliding_row(data, &data->rows[2], GRect(2, 62, width, 96), data->bitham42_light, 3);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[2].label));
 
-  init_sliding_row(data, &data->rows[3], GRect(0, 98, width, 132), data->bitham42_light, 0);
+  init_sliding_row(data, &data->rows[3], GRect(2, 98, width, 132), data->bitham42_light, 0);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[3].label));
-  init_sliding_row(data, &data->steps_row, GRect(0, 142, width / 2, 168), data->gothic18_bold, 6);
+  init_sliding_row(data, &data->steps_row, GRect(2, 144, width / 2, 168), data->gothic18_bold, 6);
   text_layer_set_text_alignment(data->steps_row.label, GTextAlignmentLeft);
   layer_add_child(window_layer, text_layer_get_layer(data->steps_row.label));
-  init_sliding_row(data, &data->battery_row, GRect(0, 142, width - padding, 168), data->gothic18, 6);
+  init_sliding_row(data, &data->battery_row, GRect(2, 144, width - padding, 168), data->gothic18, 6);
   text_layer_set_text_alignment(data->battery_row.label, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight));
   layer_add_child(window_layer, text_layer_get_layer(data->battery_row.label));
 
-  init_sliding_row(data, &data->weather_condition_row, GRect(0, 0, width / 2, 60), data->gothic18, 6);
+  init_sliding_row(data, &data->weather_condition_row, GRect(2, -2, width / 2, 60), data->gothic18_bold, 6);
   text_layer_set_text_alignment(data->weather_condition_row.label, GTextAlignmentLeft);
-  text_layer_set_text(data->weather_condition_row.label, "loading");
   layer_add_child(window_layer, text_layer_get_layer(data->weather_condition_row.label));
 
-  init_sliding_row(data, &data->weather_row, GRect(0, 15, width / 2, 60), data->gothic18_bold, 6);
+  init_sliding_row(data, &data->weather_row, GRect(2, 14, width / 2, 60), data->gothic18, 6);
   text_layer_set_text_alignment(data->weather_row.label, GTextAlignmentLeft);
-  text_layer_set_text(data->weather_row.label, "--c");
   layer_add_child(window_layer, text_layer_get_layer(data->weather_row.label));
 
   GFont norm14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
@@ -488,6 +591,36 @@ static void handle_init() {
 
   layer_set_hidden(text_layer_get_layer(data->demo_label), true);
   layer_mark_dirty(window_layer);
+
+  // Load cached weather data BEFORE make_animation() to avoid slide-in delay
+  // Temperature now goes to top-left (weather_condition_row), spelled out
+  if (persist_exists(PERSIST_WEATHER_TEMPERATURE)) {
+    int cached_temp = persist_read_int(PERSIST_WEATHER_TEMPERATURE);
+    char temp_words[32];
+    number_to_words(cached_temp, temp_words);
+    snprintf(rs->temperature[rs->next_temperature], 32, "%s c", temp_words);
+    text_layer_set_text(data->weather_condition_row.label, rs->temperature[rs->next_temperature]);
+    data->weather_condition_row.state = IN_FRAME;
+    data->last_temperature = cached_temp;
+    // Ensure the layer is positioned at still_pos to prevent animation
+    GRect frame = layer_get_frame(text_layer_get_layer(data->weather_condition_row.label));
+    frame.origin.x = data->weather_condition_row.still_pos;
+    layer_set_frame(text_layer_get_layer(data->weather_condition_row.label), frame);
+  }
+  
+  // Condition now goes to second-left (weather_row)
+  if (persist_exists(PERSIST_WEATHER_CONDITION)) {
+    char cached_condition[32];
+    persist_read_string(PERSIST_WEATHER_CONDITION, cached_condition, sizeof(cached_condition));
+    strncpy(rs->weather_condition[rs->next_weather_condition], cached_condition, 31);
+    rs->weather_condition[rs->next_weather_condition][31] = '\0';
+    text_layer_set_text(data->weather_row.label, rs->weather_condition[rs->next_weather_condition]);
+    data->weather_row.state = IN_FRAME;
+    // Ensure the layer is positioned at still_pos to prevent animation
+    GRect frame = layer_get_frame(text_layer_get_layer(data->weather_row.label));
+    frame.origin.x = data->weather_row.still_pos;
+    layer_set_frame(text_layer_get_layer(data->weather_row.label), frame);
+  }
 
   make_animation();
 
@@ -509,8 +642,8 @@ static void handle_init() {
   app_message_register_outbox_sent(outbox_sent_callback);
   app_message_open(256, 256);
   
-  APP_LOG(APP_LOG_LEVEL_INFO, "AppMessage opened, requesting weather");
-  request_weather();
+  // Weather will update automatically every 15 minutes via handle_minute_tick
+  // Cached data already loaded earlier to prevent slide-in animation
 
   const bool animated = true;
   window_stack_push(data->window, animated);
