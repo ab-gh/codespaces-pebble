@@ -1,0 +1,31 @@
+{
+    "displayName": "Sliding Text++",
+    "uuid": "00000000-0000-0000-0000-000000000001",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+        "aplite",
+        "basalt",
+        "chalk",
+        "diorite",
+        "emery"
+    ],
+    "watchapp": {
+        "watchface": true
+    },
+    "messageKeys": {
+        "dummy": 10000
+    },
+    "resources": {
+        "media": []
+    },
+    "name": "myfirstproject",
+    "shortName": "Sliding Text++",
+    "longName": "Sliding Text++",
+    "versionLabel": "1.0",
+    "companyName": "MakeAwesomeHappen",
+    "appKeys": {
+        "dummy": 10000
+    },
+    "capabilities": []
+}
