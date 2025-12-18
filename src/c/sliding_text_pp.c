@@ -439,7 +439,7 @@ static void health_handler(HealthEventType event, void *context) {
       int steps = (int)health_service_sum_today(metric);
       
       if (data->last_steps != steps) {
-        snprintf(rs->steps[rs->next_steps], 32, "%d", steps);
+        snprintf(rs->steps[rs->next_steps], 32, "%d s", steps);
         slide_in_text(data, &data->steps_row, rs->steps[rs->next_steps]);
         rs->next_steps = rs->next_steps ? 0 : 1;
         data->last_steps = steps;

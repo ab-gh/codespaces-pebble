@@ -4,6 +4,7 @@
 # Feel free to customize this to your needs.
 #
 import os.path
+import os
 
 top = '.'
 out = 'build'
@@ -52,3 +53,20 @@ def build(ctx):
                                          'src/pkjs/**/*.json',
                                          'src/common/**/*.js']),
                    js_entry_file='src/pkjs/index.js')
+    
+    # Inject WEATHER_SECRET API key into the built JavaScript
+    def inject_api_key(task):
+        api_key = os.environ.get('WEATHER_SECRET', '')
+        if api_key:
+            js_file = os.path.join(out, 'pebble-js-app.js')
+            if os.path.exists(js_file):
+                with open(js_file, 'r') as f:
+                    content = f.read()
+                content = content.replace('WEATHER_API_KEY_PLACEHOLDER', api_key)
+                with open(js_file, 'w') as f:
+                    f.write(content)
+                print('Injected WEATHER_SECRET into pebble-js-app.js')
+        else:
+            print('WARNING: WEATHER_SECRET environment variable not set!')
+    
+    ctx.add_post_fun(inject_api_key)

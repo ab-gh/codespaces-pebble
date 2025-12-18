@@ -1,5 +1,5 @@
 // OpenWeatherMap API Key - Get one free at https://openweathermap.org/appid
-var myAPIKey = 'REMOVED_API_KEY';
+var myAPIKey = 'REMOVED_SECRET';
 
 // BATTERY OPTIMIZATION STRATEGY:
 // - GPS cached for 3 hours (major battery saver - GPS is expensive)
