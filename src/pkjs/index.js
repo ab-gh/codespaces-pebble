@@ -1,3 +1,8 @@
+// Import Clay for configuration
+var Clay = require('pebble-clay');
+var clayConfig = require('./config');
+var clay = new Clay(clayConfig);
+
 // OpenWeatherMap API Key - Get one free at https://openweathermap.org/appid
 // The API key is automatically injected from WEATHER_SECRET environment variable during build
 // WEATHER_API_KEY_PLACEHOLDER will be replaced with the actual key during build
@@ -152,6 +157,18 @@ var locationOptions = {
   'maximumAge': 60000
 };
 
+// Helper to format time ago
+function getTimeAgo(timestamp) {
+  if (!timestamp || timestamp === 0) {
+    return 'Never';
+  }
+  var minutes = Math.round((Date.now() - timestamp) / 60000);
+  if (minutes === 0) {
+    return 'Just now';
+  }
+  return minutes + ' minute(s) ago';
+}
+
 Pebble.addEventListener('ready', function (e) {
   console.log('PebbleKit JS ready!');
   
@@ -168,4 +185,42 @@ Pebble.addEventListener('ready', function (e) {
 Pebble.addEventListener('appmessage', function (e) {
   console.log('Received message from watch, requesting weather update');
   getWeather();
+});
+
+// Handle showing configuration
+Pebble.addEventListener('showConfiguration', function(e) {
+  console.log('Opening configuration page');
+  console.log('--- Current Status ---');
+  console.log('Last Weather Update: ' + getTimeAgo(lastWeatherUpdate));
+  console.log('Last GPS Update: ' + getTimeAgo(lastLocationTime));
+  console.log('Cached Location: ' + (cachedLocation ? cachedLocation.latitude.toFixed(4) + ', ' + cachedLocation.longitude.toFixed(4) : 'None'));
+  console.log('API Key Status: ' + ((myAPIKey && myAPIKey !== 'WEATHER_API_KEY_PLACEHOLDER') ? 'Configured' : 'Missing'));
+  console.log('---------------------');
+  Pebble.openURL(clay.generateUrl());
+});
+
+// Handle configuration close
+Pebble.addEventListener('webviewclosed', function(e) {
+  if (e && !e.response) {
+    console.log('Configuration cancelled');
+    return;
+  }
+
+  // Get the Clay response
+  var dict = clay.getSettings(e.response);
+  console.log('Config response:', JSON.stringify(dict));
+  
+  // Check if refresh buttons were clicked
+  if (dict && dict['refresh-weather']) {
+    console.log('Refresh weather button clicked');
+    getWeather(true);
+  }
+  
+  if (dict && dict['refresh-gps']) {
+    console.log('Refresh GPS button clicked');
+    // Force GPS refresh by invalidating cache
+    lastLocationTime = 0;
+    cachedLocation = null;
+    getWeather(true);
+  }
 });

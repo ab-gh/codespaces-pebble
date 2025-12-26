@@ -1,10 +1,14 @@
 {
   "name": "myfirstproject",
-  "author": "MakeAwesomeHappen",
+  "author": "ab-gh",
   "version": "1.0.0",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "pebble-clay": "^1.0.4"
+  },
   "pebble": {
     "displayName": "Sliding Text++",
     "uuid": "00000000-0000-0000-0000-000000000001",
@@ -20,6 +24,9 @@
     "watchapp": {
       "watchface": true
     },
+    "capabilities": [
+      "location"
+    ],
     "messageKeys": [
       "dummy"
     ],

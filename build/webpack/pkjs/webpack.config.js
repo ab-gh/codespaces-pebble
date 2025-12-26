@@ -21,7 +21,8 @@ const resolveRoots = ["/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble/com
 "/workspaces/codespaces-pebble/myfirstproject/build/js"];
 
 // Object, { alias1: 'path1', ... }
-const resolveAliases = {"app_package.json": "/workspaces/codespaces-pebble/myfirstproject/package.json"};
+const resolveAliases = {"pebble-clay": "pebble-clay/dist/js",
+"app_package.json": "/workspaces/codespaces-pebble/myfirstproject/package.json"};
 
 // null or Object with key 'sourceMapFilename'
 const sourceMapConfig = {"sourceMapFilename": "pebble-js-app.js.map"};

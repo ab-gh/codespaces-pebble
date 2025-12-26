@@ -143,8 +143,8 @@ static bool would_collide_with_font(const char *left_text, const char *right_tex
   GSize right_size = graphics_text_layout_get_content_size(right_text, font,
     GRect(0, 0, screen_width, 100), GTextOverflowModeWordWrap, GTextAlignmentLeft);
   
-  // Add some padding between texts (20 pixels for better safety)
-  int padding = 20;
+  // Add some padding between texts (40 pixels for better safety)
+  int padding = 40;
   return (left_size.w + right_size.w + padding) > screen_width;
 }
 

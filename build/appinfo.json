@@ -13,6 +13,10 @@
     "watchapp": {
         "watchface": true
     },
+    "capabilities": [
+        "location",
+        "configurable"
+    ],
     "messageKeys": {
         "dummy": 10000
     },
@@ -23,9 +27,8 @@
     "shortName": "Sliding Text++",
     "longName": "Sliding Text++",
     "versionLabel": "1.0",
-    "companyName": "MakeAwesomeHappen",
+    "companyName": "ab-gh",
     "appKeys": {
         "dummy": 10000
-    },
-    "capabilities": []
+    }
 }

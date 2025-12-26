@@ -28,7 +28,8 @@ LD = 'arm-none-eabi-ld'
 LIBDIR = '/usr/local/lib64'
 LIBPATH_ST = '-L%s'
 LIB_DIR = 'node_modules'
-LIB_JSON = []
+LIB_JSON = [{'name': 'pebble-clay', 'version': '1.0.4', 'description': 'Pebble Config Framework', 'scripts': {'test-travis': './node_modules/.bin/gulp && ./node_modules/.bin/karma start ./test/karma.conf.js --single-run --browsers chromeTravisCI && ./node_modules/.bin/eslint ./', 'test-debug': '(export DEBUG=true && ./node_modules/.bin/gulp && ./node_modules/.bin/karma start ./test/karma.conf.js --no-single-run)', 'test': './node_modules/.bin/gulp && ./node_modules/.bin/karma start ./test/karma.conf.js --single-run', 'lint': './node_modules/.bin/eslint ./', 'build': 'gulp', 'dev': 'gulp dev', 'pebble-clean': 'rm -rf tmp src/js/index.js && pebble clean', 'pebble-publish': 'npm run pebble-clean && npm run build && pebble build && pebble package publish && npm run pebble-clean', 'pebble-build': 'npm run build && pebble build'}, 'repository': {'type': 'git', 'url': 'git+https://github.com/pebble/clay.git'}, 'keywords': ['pebble', 'config', 'configuration', 'pebble-package'], 'author': 'Pebble Technology', 'license': 'MIT', 'bugs': {'url': 'https://github.com/pebble/clay/issues'}, 'pebble': {'projectType': 'package', 'sdkVersion': '3', 'targetPlatforms': ['aplite', 'basalt', 'chalk', 'diorite', 'emery'], 'resources': {'media': []}, 'capabilities': ['configurable']}, 'homepage': 'https://github.com/pebble/clay#readme', 'devDependencies': {'autoprefixer': '^6.3.1', 'bourbon': '^4.2.6', 'browserify': '^13.0.0', 'browserify-istanbul': '^0.2.1', 'chai': '^3.4.1', 'deamdify': '^0.2.0', 'deepcopy': '^0.6.1', 'del': '^2.0.2', 'eslint': '^1.5.1', 'eslint-config-pebble': '^1.2.0', 'eslint-plugin-standard': '^1.3.1', 'gulp': '^3.9.0', 'gulp-autoprefixer': '^3.1.0', 'gulp-htmlmin': '^1.3.0', 'gulp-inline': '0.0.15', 'gulp-insert': '^0.5.0', 'gulp-sass': '^2.1.1', 'gulp-sourcemaps': '^1.6.0', 'gulp-uglify': '^1.5.2', 'joi': '^6.10.1', 'karma': '^0.13.19', 'karma-browserify': '^5.0.1', 'karma-chrome-launcher': '^0.2.2', 'karma-coverage': '^0.5.3', 'karma-mocha': '^0.2.1', 'karma-mocha-reporter': '^1.1.5', 'karma-source-map-support': '^1.1.0', 'karma-threshold-reporter': '^0.1.15', 'mocha': '^2.3.4', 'postcss': '^5.0.14', 'require-from-string': '^1.1.0', 'sassify': '^0.9.1', 'sinon': '^1.17.3', 'stringify': '^3.2.0', 'through': '^2.3.8', 'tosource': '^1.0.0', 'vinyl-buffer': '^1.0.0', 'vinyl-source-stream': '^1.1.0', 'watchify': '^3.7.0'}, 'dependencies': {}, 'path': 'node_modules/pebble-clay/dist', 'js_paths': ['node_modules/pebble-clay/dist/js/index.js']}]
+LIB_RESOURCES_JSON = {'pebble-clay': []}
 LIB_ST = '-l%s'
 LINKFLAGS = ['-mcpu=cortex-m3', '-mthumb', '-Wl,--gc-sections', '-Wl,--warn-common', '-fPIE', '-Os']
 LINKFLAGS_MACBUNDLE = ['-bundle', '-undefined', 'dynamic_lookup']
@@ -46,7 +47,7 @@ PEBBLE_SDK_ROOT = '/home/vscode/.pebble-sdk/SDKs/current/sdk-core/pebble'
 PLATFORM = {'NAME': 'diorite', 'MAX_APP_BINARY_SIZE': 65536, 'MAX_APP_MEMORY_SIZE': 65536, 'MAX_WORKER_MEMORY_SIZE': 10240, 'MAX_RESOURCES_SIZE_APPSTORE': 262144, 'MAX_RESOURCES_SIZE': 1048576, 'DEFINES': ['PBL_PLATFORM_DIORITE', 'PBL_BW', 'PBL_RECT', 'PBL_MICROPHONE', 'PBL_HEALTH', 'PBL_SMARTSTRAP', 'PBL_DISPLAY_WIDTH=144', 'PBL_DISPLAY_HEIGHT=168'], 'BUILD_DIR': 'diorite', 'BUNDLE_BIN_DIR': 'diorite', 'ADDITIONAL_TEXT_LINES_FOR_PEBBLE_H': [], 'MAX_FONT_GLYPH_SIZE': 256, 'TAGS': ['diorite', 'bw', 'rect', 'mic', 'strap', 'health', '144w', '168h']}
 PLATFORM_NAME = 'diorite'
 PREFIX = '/usr/local'
-PROJECT_INFO = {'displayName': 'Sliding Text++', 'uuid': '00000000-0000-0000-0000-000000000001', 'sdkVersion': '3', 'enableMultiJS': True, 'targetPlatforms': ['aplite', 'basalt', 'chalk', 'diorite', 'emery'], 'watchapp': {'watchface': True}, 'messageKeys': {'dummy': 10000}, 'resources': {'media': []}, 'name': 'myfirstproject', 'shortName': 'Sliding Text++', 'longName': 'Sliding Text++', 'versionLabel': '1.0', 'companyName': 'MakeAwesomeHappen', 'appKeys': {'dummy': 10000}}
+PROJECT_INFO = {'displayName': 'Sliding Text++', 'uuid': '00000000-0000-0000-0000-000000000001', 'sdkVersion': '3', 'enableMultiJS': True, 'targetPlatforms': ['aplite', 'basalt', 'chalk', 'diorite', 'emery'], 'watchapp': {'watchface': True}, 'capabilities': ['location'], 'messageKeys': {'dummy': 10000}, 'resources': {'media': []}, 'name': 'myfirstproject', 'shortName': 'Sliding Text++', 'longName': 'Sliding Text++', 'versionLabel': '1.0', 'companyName': 'ab-gh', 'appKeys': {'dummy': 10000}}
 REQUESTED_PLATFORMS = ['aplite', 'basalt', 'chalk', 'diorite', 'emery']
 RESOURCES_JSON = []
 RPATH_ST = '-Wl,-rpath,%s'
@@ -61,7 +62,7 @@ STLIB_MARKER = None
 STLIB_ST = '-l%s'
 SUPPORTED_PLATFORMS = ['flint', 'diorite', 'chalk', 'emery', 'basalt', 'aplite']
 TARGET_PLATFORMS = ['emery', 'diorite', 'chalk', 'basalt', 'aplite']
-TIMESTAMP = 1766057049
+TIMESTAMP = 1766772416
 USE_GROUPS = True
 VERBOSE = 0
 WEBPACK = ['/home/vscode/.pebble-sdk/SDKs/current/node_modules/.bin/webpack']
