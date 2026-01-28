@@ -29,6 +29,37 @@ var GPS_CACHE_DURATION = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
 var lastWeatherUpdate = 0;
 var WEATHER_UPDATE_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
 
+// API call limiting (1000 calls/day free tier)
+var API_DAILY_LIMIT = 900; // Set to 900 to leave safety margin
+var apiCallCount = 0;
+var apiCallResetTime = 0;
+
+function checkAndResetApiCounter() {
+  var now = Date.now();
+  var oneDayMs = 24 * 60 * 60 * 1000;
+  
+  // Reset counter if it's a new day
+  if (now - apiCallResetTime > oneDayMs) {
+    console.log('Resetting API call counter for new day');
+    apiCallCount = 0;
+    apiCallResetTime = now;
+  }
+}
+
+function canMakeApiCall() {
+  checkAndResetApiCounter();
+  if (apiCallCount >= API_DAILY_LIMIT) {
+    console.error('API daily limit reached (' + apiCallCount + '/' + API_DAILY_LIMIT + '). Skipping weather update.');
+    return false;
+  }
+  return true;
+}
+
+function incrementApiCallCount() {
+  apiCallCount++;
+  console.log('API calls today: ' + apiCallCount + '/' + API_DAILY_LIMIT);
+}
+
 function iconFromWeatherId(weatherId) {
   if (weatherId < 600) {
     return 2; // Rain
@@ -41,31 +72,97 @@ function iconFromWeatherId(weatherId) {
   }
 }
 
+function getWeatherSeverity(weatherId) {
+  // Higher number = worse weather (for prioritization)
+  if (weatherId >= 200 && weatherId < 300) return 5; // Thunderstorm
+  if (weatherId >= 500 && weatherId < 600) return 4; // Rain
+  if (weatherId >= 600 && weatherId < 700) return 3; // Snow
+  if (weatherId >= 700 && weatherId < 800) return 2; // Atmosphere (fog, etc)
+  if (weatherId > 800) return 1; // Clouds
+  return 0; // Clear
+}
+
+function isInclementWeather(weatherId) {
+  // Check if weather is rain, snow, or storm
+  return weatherId >= 200 && weatherId < 700;
+}
+
+function findIncomingWeather(hourlyForecast) {
+  // Check next 3 periods (9 hours) for incoming bad weather
+  var maxPeriods = Math.min(3, hourlyForecast.length);
+  for (var i = 0; i < maxPeriods; i++) {
+    var hour = hourlyForecast[i];
+    if (isInclementWeather(hour.weather[0].id)) {
+      return {
+        condition: hour.weather[0].main.toLowerCase(),
+        hoursAway: i * 3, // Convert period index to hours (0, 3, 6)
+        weatherId: hour.weather[0].id
+      };
+    }
+  }
+  return null;
+}
+
+function formatConditionWithTiming(condition, hoursAway) {
+  var hourWords = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+  
+  if (hoursAway === 0) {
+    return condition + ' now';
+  } else if (hoursAway < hourWords.length) {
+    return condition + ' ' + hourWords[hoursAway] + ' hr';
+  } else {
+    return condition + ' later';
+  }
+}
+
 function fetchWeather(latitude, longitude) {
-  if (!myAPIKey) {
-    console.error('Cannot fetch weather: API key is missing!');
+  if (!canMakeApiCall()) {
+    console.log('Skipping weather fetch - daily limit reached');
     return;
   }
   
-  var url = 'http://api.openweathermap.org/data/2.5/forecast?' +
-    'lat=' + latitude + '&lon=' + longitude + '&cnt=1&appid=' + myAPIKey;
-  console.log('Fetching forecast from: ' + url.replace(myAPIKey, 'API_KEY'));
+  // Get next 18 hours of forecast (6 periods x 3 hours each)
+  var url = 'http://api.openweathermap.org/data/2.5/forecast?lat=' + latitude + '&lon=' + longitude + '&cnt=6&appid=' + myAPIKey;
+  console.log('Fetching forecast...');
+  
+  incrementApiCallCount();
   
   var req = new XMLHttpRequest();
   req.open('GET', url, true);
   req.onload = function () {
     if (req.readyState === 4) {
       if (req.status === 200) {
-        console.log('Forecast API Response: ' + req.responseText);
+        console.log('Forecast API Response received');
         var response = JSON.parse(req.responseText);
-        // Get the first forecast entry (next 3-hour period)
-        var forecast = response.list[0];
-        var temperature = Math.round(forecast.main.temp - 273.15);
-        var icon = iconFromWeatherId(forecast.weather[0].id);
-        var condition = forecast.weather[0].main.toLowerCase();
-        console.log('Forecast Temperature: ' + temperature);
-        console.log('Forecast Icon: ' + icon);
-        console.log('Forecast Condition: ' + condition);
+        
+        // Get current conditions from first forecast period
+        var current = response.list[0];
+        var currentTemp = Math.round(current.main.temp - 273.15);
+        var currentWeatherId = current.weather[0].id;
+        var currentCondition = current.weather[0].main.toLowerCase();
+        
+        // Check for incoming inclement weather in next 3 periods (9 hours)
+        var incoming = findIncomingWeather(response.list);
+        
+        var temperature, condition, icon;
+        
+        if (incoming && !isInclementWeather(currentWeatherId)) {
+          // Bad weather is coming and it's not currently bad, show timing
+          temperature = currentTemp;
+          condition = formatConditionWithTiming(incoming.condition, incoming.hoursAway);
+          icon = iconFromWeatherId(incoming.weatherId);
+          console.log('Incoming weather: ' + incoming.condition + ' in ' + incoming.hoursAway + ' hours');
+        } else {
+          // Show current weather
+          temperature = currentTemp;
+          condition = currentCondition;
+          icon = iconFromWeatherId(currentWeatherId);
+          console.log('Current weather: ' + condition);
+        }
+        
+        console.log('Temperature: ' + temperature + 'C');
+        console.log('Condition: ' + condition);
+        console.log('Icon: ' + icon);
         
         // Send using numeric keys
         var dict = {
